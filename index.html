@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NeraFile – Giriş yapmadan dosya paylaş</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#e9eef6;--card:#fff;--ink:#12203a;--mute:#5d6b86;--line:#d5deec;--acc:#2b59ff;--acc2:#1a3fd1;--ok:#0c8f63;--err:#c62f4b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Bricolage Grotesque",system-ui,sans-serif}
+.wrap{max-width:880px;margin:0 auto;padding:28px 18px 80px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:22px}
+h1{margin:0;font-size:clamp(2.4rem,7vw,3.6rem);font-weight:800;letter-spacing:-.04em;line-height:1}
+h1 b{color:var(--acc)}
+header p{margin:0;color:var(--mute);max-width:34ch}
+.tabs{display:flex;gap:6px;background:#dbe3f1;padding:5px;border-radius:14px;margin-bottom:18px}
+.tabs button{flex:1;border:0;background:none;padding:11px;border-radius:10px;font:600 1rem inherit;font-family:inherit;color:var(--mute);cursor:pointer}
+.tabs button[aria-selected=true]{background:var(--card);color:var(--ink);box-shadow:0 1px 3px #12203a22}
+.panel{background:var(--card);border-radius:18px;padding:22px;border:1px solid var(--line)}
+label{display:block;font-weight:600;margin:14px 0 5px}
+label small{font-weight:400;color:var(--mute)}
+input,textarea,select{width:100%;padding:12px 13px;border:1.5px solid var(--line);border-radius:10px;font:inherit;background:#f8fafd;color:var(--ink)}
+textarea{resize:vertical;min-height:70px}
+input:focus,textarea:focus,select:focus,button:focus-visible{outline:3px solid #2b59ff55;border-color:var(--acc)}
+.kind{display:flex;gap:8px}
+.kind label{flex:1;margin:0;font-weight:600;border:1.5px solid var(--line);border-radius:10px;padding:10px;text-align:center;cursor:pointer;background:#f8fafd}
+.kind input{display:none}
+.kind label:has(input:checked){border-color:var(--acc);background:#e8eeff;color:var(--acc2)}
+.btn{margin-top:18px;border:0;background:var(--acc);color:#fff;font:700 1rem inherit;font-family:inherit;padding:13px 22px;border-radius:12px;cursor:pointer}
+.btn:hover{background:var(--acc2)}.btn:disabled{opacity:.55;cursor:wait}
+.btn.ghost{background:#e8eeff;color:var(--acc2);margin:0;padding:9px 14px;font-size:.92rem}
+.msg{margin-top:14px;padding:11px 13px;border-radius:10px;font-weight:500;display:none;word-break:break-word}
+.msg.ok{display:block;background:#dff6ec;color:#07603f}.msg.err{display:block;background:#fde4e9;color:#8d1d34}
+.bar{height:6px;background:var(--line);border-radius:6px;overflow:hidden;margin-top:14px;display:none}
+.bar i{display:block;height:100%;width:0;background:var(--acc);transition:width .2s}
+.search{display:flex;gap:8px}.search .btn{margin:0}
+.hint{color:var(--mute);font-size:.92rem;margin:8px 2px 16px}
+.item{border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:12px;background:#fff}
+.item h3{margin:0 0 2px;font-size:1.15rem;letter-spacing:-.01em;word-break:break-word}
+.meta{color:var(--mute);font-size:.88rem;margin-bottom:8px;word-break:break-word}
+.code{background:#e8eeff;color:var(--acc2);padding:2px 8px;border-radius:6px;font-weight:600;cursor:pointer}
+.item p{margin:6px 0 10px;white-space:pre-wrap;word-break:break-word}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.prev{margin-top:12px}.prev img,.prev video{max-width:100%;max-height:420px;border-radius:10px;display:block;background:#000}
+.prev audio{width:100%}
+.empty{text-align:center;color:var(--mute);padding:30px 10px}
+a{color:var(--acc2)}
+footer{margin-top:28px;color:var(--mute);font-size:.85rem;text-align:center}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Nera<b>File</b></h1>
+    <p>Giriş yok, hesap yok. Dosya veya link yükle, kodla ya da başlıkla bul.</p>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" id="t-search" aria-selected="true">Ara</button>
+    <button role="tab" id="t-share" aria-selected="false">Paylaş</button>
+  </div>
+
+  <section class="panel" id="p-search">
+    <div class="search">
+      <input id="q" placeholder="Paylaşım kodu veya başlık yaz" autocomplete="off" aria-label="Ara">
+      <button class="btn" id="go">Ara</button>
+    </div>
+    <div class="hint">Boş bırakıp aratırsan en son paylaşımlar gelir.</div>
+    <div id="results"></div>
+  </section>
+
+  <section class="panel" id="p-share" hidden>
+    <div class="kind">
+      <label><input type="radio" name="kind" value="file" checked>Dosya (foto, video, vb.)</label>
+      <label><input type="radio" name="kind" value="link">Link</label>
+    </div>
+    <label for="title">Başlık</label>
+    <input id="title" maxlength="80" placeholder="Örn: Tatil fotoğrafları">
+    <label for="code">Özel kod <small>(isteğe bağlı, boşsa otomatik üretilir)</small></label>
+    <input id="code" maxlength="30" placeholder="Örn: tatil2026" autocomplete="off">
+    <div id="fileBox">
+      <label for="file">Dosya <small>(en fazla 5 MB)</small></label>
+      <input id="file" type="file">
+    </div>
+    <div id="linkBox" hidden>
+      <label for="url">Link</label>
+      <input id="url" type="url" placeholder="https://...">
+    </div>
+    <label for="desc">Açıklama <small>(isteğe bağlı)</small></label>
+    <textarea id="desc" maxlength="500"></textarea>
+    <button class="btn" id="send">Paylaş</button>
+    <div class="bar" id="bar"><i></i></div>
+    <div class="msg" id="smsg"></div>
+  </section>
+
+  <footer>NeraFile · Resimler küçültülür, diğer dosyalar sıkıştırılıp base64 metin olarak saklanır. Yüklediğin her şey herkese açıktır.</footer>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, getDocs, collection, query, orderBy, limit, writeBatch, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
+
+const app = initializeApp({
+  apiKey: "AIzaSyAx_PQMcya4sPrzRBXd6Tz3431gdEflK3o",
+  authDomain: "dosya-53694.firebaseapp.com",
+  projectId: "dosya-53694",
+  storageBucket: "dosya-53694.firebasestorage.app",
+  messagingSenderId: "967836787969",
+  appId: "1:967836787969:web:18822540d620237db8a700",
+  measurementId: "G-VJYCF8EPCS"
+});
+const db = getFirestore(app);
+
+const MAX = 5 * 1024 * 1024;     // yüklenebilecek en büyük dosya
+const CHUNK = 900000;            // Firestore belge sınırı 1 MiB, güvenli parça boyutu
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const tr = s => s.toLocaleLowerCase("tr");
+const norm = s => tr(s.trim()).replace(/[^a-z0-9ğüşıöç_-]+/g, "-").replace(/^-+|-+$/g, "");
+const randCode = () => Math.random().toString(36).slice(2, 8);
+
+/* ---------- sekmeler ---------- */
+function tab(name) {
+  $("#p-search").hidden = name !== "search";
+  $("#p-share").hidden = name !== "share";
+  $("#t-search").setAttribute("aria-selected", name === "search");
+  $("#t-share").setAttribute("aria-selected", name === "share");
+}
+$("#t-search").onclick = () => tab("search");
+$("#t-share").onclick = () => tab("share");
+document.querySelectorAll('input[name=kind]').forEach(r => r.onchange = () => {
+  const link = document.querySelector('input[name=kind]:checked').value === "link";
+  $("#fileBox").hidden = link; $("#linkBox").hidden = !link;
+});
+
+/* ---------- base64 / sıkıştırma ---------- */
+function bytesToB64(bytes) {
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+function b64ToBytes(b64) {
+  const s = atob(b64), a = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i);
+  return a;
+}
+async function pipe(bytes, stream) {
+  return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
+}
+function shrinkImage(file) {
+  return new Promise((res, rej) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => b ? res(b) : rej(new Error("Resim işlenemedi")), "image/jpeg", .75);
+    };
+    img.onerror = () => rej(new Error("Resim okunamadı"));
+    img.src = url;
+  });
+}
+async function encode(file) {
+  let bytes, mime = file.type || "application/octet-stream", name = file.name, gz = false;
+  if (/^image\/(jpeg|png|webp|bmp)$/.test(mime)) {
+    const b = await shrinkImage(file);
+    bytes = new Uint8Array(await b.arrayBuffer()); mime = "image/jpeg"; name = name.replace(/\.\w+$/, "") + ".jpg";
+  } else {
+    bytes = new Uint8Array(await file.arrayBuffer());
+    if (!/^(video|audio)\//.test(mime) && typeof CompressionStream !== "undefined") {
+      const z = await pipe(bytes, new CompressionStream("gzip"));
+      if (z.length < bytes.length) { bytes = z; gz = true; }
+    }
+  }
+  return { b64: bytesToB64(bytes), mime, name, gz, size: bytes.length };
+}
+
+/* ---------- paylaşma ---------- */
+function say(el, text, type) { el.className = "msg " + type; el.innerHTML = text; }
+function progress(p) { $("#bar").style.display = p == null ? "none" : "block"; if (p != null) $("#bar i").style.width = p + "%"; }
+
+$("#send").onclick = async () => {
+  const m = $("#smsg"); m.className = "msg";
+  const kind = document.querySelector('input[name=kind]:checked').value;
+  const title = $("#title").value.trim();
+  if (!title) return say(m, "Bir başlık yazman gerekiyor.", "err");
+  let code = norm($("#code").value) || randCode();
+  let url = "";
+  if (kind === "link") {
+    url = $("#url").value.trim();
+    if (!/^https?:\/\//i.test(url)) return say(m, "Link http:// veya https:// ile başlamalı.", "err");
+  } else {
+    const f = $("#file").files[0];
+    if (!f) return say(m, "Bir dosya seçmelisin.", "err");
+    if (f.size > MAX) return say(m, "Dosya 5 MB'tan büyük olamaz.", "err");
+  }
+  $("#send").disabled = true; progress(5);
+  try {
+    if ((await getDoc(doc(db, "files", code))).exists()) throw new Error(`"${esc(code)}" kodu zaten kullanılıyor, başka bir kod dene.`);
+    const meta = { title, titleLower: tr(title), code, kind, desc: $("#desc").value.trim(), createdAt: serverTimestamp(), chunks: 0 };
+    if (kind === "link") meta.url = url;
+    else {
+      const e = await encode($("#file").files[0]);
+      progress(30);
+      const parts = [];
+      for (let i = 0; i < e.b64.length; i += CHUNK) parts.push(e.b64.slice(i, i + CHUNK));
+      Object.assign(meta, { name: e.name, mime: e.mime, gz: e.gz, size: e.size, chunks: parts.length });
+      for (let i = 0; i < parts.length; i++) {
+        const b = writeBatch(db);
+        b.set(doc(db, "files", code, "c", String(i).padStart(3, "0")), { d: parts[i] });
+        await b.commit();
+        progress(30 + 65 * (i + 1) / parts.length);
+      }
+    }
+    await setDoc(doc(db, "files", code), meta);   // meta en son yazılır: yarım yüklemeler görünmez
+    progress(100);
+    say(m, `Paylaşıldı! Kodun: <b>${esc(code)}</b><br>Doğrudan link: <a href="#${esc(code)}">${esc(location.href.split("#")[0])}#${esc(code)}</a>`, "ok");
+    $("#title").value = $("#code").value = $("#url").value = $("#desc").value = ""; $("#file").value = "";
+  } catch (err) {
+    console.error(err);
+    say(m, esc(err.message || "Yükleme başarısız. Firestore kurallarını kontrol et."), "err");
+  } finally { $("#send").disabled = false; setTimeout(() => progress(null), 800); }
+};
+
+/* ---------- arama ---------- */
+function card(d) {
+  const date = d.createdAt?.toDate ? d.createdAt.toDate().toLocaleString("tr-TR") : "";
+  const kb = d.size ? ` · ${(d.size / 1024).toFixed(0)} KB` : "";
+  const open = d.kind === "link"
+    ? `<a class="btn ghost" href="${esc(d.url)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">Linki aç</a>`
+    : `<button class="btn ghost" data-act="view" data-code="${esc(d.code)}">Önizle / Aç</button>
+       <button class="btn ghost" data-act="dl" data-code="${esc(d.code)}">İndir</button>`;
+  return `<article class="item" id="i-${esc(d.code)}">
+    <h3>${esc(d.title)}</h3>
+    <div class="meta">Kod: <span class="code" title="Kopyala" data-copy="${esc(d.code)}">${esc(d.code)}</span> · ${d.kind === "link" ? "Link" : esc(d.name || "Dosya")}${kb} · ${esc(date)}</div>
+    ${d.desc ? `<p>${esc(d.desc)}</p>` : ""}
+    <div class="row">${open}</div><div class="prev"></div></article>`;
+}
+const cache = {};
+async function search(raw) {
+  const out = $("#results"), q = tr(raw.trim());
+  out.innerHTML = '<div class="empty">Aranıyor…</div>';
+  try {
+    const found = new Map();
+    if (q) { const s = await getDoc(doc(db, "files", norm(q))); if (s.exists()) found.set(s.id, s.data()); }
+    const snap = await getDocs(query(collection(db, "files"), orderBy("createdAt", "desc"), limit(200)));
+    snap.forEach(s => { const d = s.data(); if (!q || d.titleLower?.includes(q) || d.code.includes(q)) found.set(s.id, d); });
+    const list = [...found.values()];
+    out.innerHTML = list.length ? list.map(card).join("") : '<div class="empty">Sonuç yok. Kodu veya başlığı kontrol et.</div>';
+  } catch (err) {
+    console.error(err);
+    out.innerHTML = '<div class="empty">Arama başarısız. Firestore kurallarını kontrol et.</div>';
+  }
+}
+$("#go").onclick = () => search($("#q").value);
+$("#q").onkeydown = e => { if (e.key === "Enter") search(e.target.value); };
+
+async function blobOf(code) {
+  if (cache[code]) return cache[code];
+  const meta = (await getDoc(doc(db, "files", code))).data();
+  const snap = await getDocs(collection(db, "files", code, "c"));
+  let b64 = ""; snap.forEach(s => b64 += s.data().d);
+  let bytes = b64ToBytes(b64);
+  if (meta.gz) bytes = await pipe(bytes, new DecompressionStream("gzip"));
+  return cache[code] = { blob: new Blob([bytes], { type: meta.mime }), meta };
+}
+$("#results").onclick = async e => {
+  const cp = e.target.closest("[data-copy]");
+  if (cp) { navigator.clipboard?.writeText(cp.dataset.copy); cp.textContent = "kopyalandı"; setTimeout(() => cp.textContent = cp.dataset.copy, 1000); return; }
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const old = b.textContent; b.disabled = true; b.textContent = "Yükleniyor…";
+  try {
+    const { blob, meta } = await blobOf(b.dataset.code), url = URL.createObjectURL(blob);
+    if (b.dataset.act === "dl") {
+      const a = document.createElement("a"); a.href = url; a.download = meta.name || meta.code; a.click();
+    } else {
+      const p = b.closest(".item").querySelector(".prev");
+      p.innerHTML = meta.mime.startsWith("image/") ? `<img src="${url}" alt="">`
+        : meta.mime.startsWith("video/") ? `<video src="${url}" controls></video>`
+        : meta.mime.startsWith("audio/") ? `<audio src="${url}" controls></audio>`
+        : '<div class="meta">Bu tür önizlenemez, indirebilirsin.</div>';
+    }
+  } catch (err) { console.error(err); alert("Dosya okunamadı."); }
+  b.disabled = false; b.textContent = old;
+};
+
+/* ---------- doğrudan link (#kod) ---------- */
+const h = decodeURIComponent(location.hash.slice(1));
+if (h) { $("#q").value = h; }
+search(h);
+</script>
+</body>
+</html>
