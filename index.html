@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NeraFile – Giriş yapmadan dosya paylaş</title>
+<title>NeraFile – Giriş yapmadan dosya ve metin paylaş</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
@@ -46,6 +46,7 @@ input:focus,textarea:focus,select:focus,button:focus-visible{outline:3px solid #
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .prev{margin-top:12px}.prev img,.prev video{max-width:100%;max-height:420px;border-radius:10px;display:block;background:#000}
 .prev audio{width:100%}
+.txt{white-space:pre-wrap;word-break:break-word;background:#f3f6fc;border:1px solid var(--line);border-radius:10px;padding:14px;max-height:480px;overflow:auto;margin:0;font:inherit}
 .empty{text-align:center;color:var(--mute);padding:30px 10px}
 a{color:var(--acc2)}
 footer{margin-top:28px;color:var(--mute);font-size:.85rem;text-align:center}
@@ -76,6 +77,7 @@ footer{margin-top:28px;color:var(--mute);font-size:.85rem;text-align:center}
   <section class="panel" id="p-share" hidden>
     <div class="kind">
       <label><input type="radio" name="kind" value="file" checked>Dosya (foto, video, vb.)</label>
+      <label><input type="radio" name="kind" value="text">Metin</label>
       <label><input type="radio" name="kind" value="link">Link</label>
     </div>
     <label for="title">Başlık</label>
@@ -85,6 +87,10 @@ footer{margin-top:28px;color:var(--mute);font-size:.85rem;text-align:center}
     <div id="fileBox">
       <label for="file">Dosya <small>(en fazla 5 MB)</small></label>
       <input id="file" type="file">
+    </div>
+    <div id="textBox" hidden>
+      <label for="body">Metin <small>(uzunluk sınırı yok)</small></label>
+      <textarea id="body" style="min-height:220px" placeholder="Buraya istediğin kadar yaz veya yapıştır..."></textarea>
     </div>
     <div id="linkBox" hidden>
       <label for="url">Link</label>
@@ -97,7 +103,7 @@ footer{margin-top:28px;color:var(--mute);font-size:.85rem;text-align:center}
     <div class="msg" id="smsg"></div>
   </section>
 
-  <footer>NeraFile · Resimler küçültülür, diğer dosyalar sıkıştırılıp base64 metin olarak saklanır. Yüklediğin her şey herkese açıktır.</footer>
+  <footer>NeraFile · Resimler küçültülür, dosyalar ve metinler sıkıştırılıp base64 olarak saklanır. Yüklediğin her şey herkese açıktır.</footer>
 </div>
 
 <script type="module">
@@ -134,8 +140,8 @@ function tab(name) {
 $("#t-search").onclick = () => tab("search");
 $("#t-share").onclick = () => tab("share");
 document.querySelectorAll('input[name=kind]').forEach(r => r.onchange = () => {
-  const link = document.querySelector('input[name=kind]:checked').value === "link";
-  $("#fileBox").hidden = link; $("#linkBox").hidden = !link;
+  const k = document.querySelector('input[name=kind]:checked').value;
+  $("#fileBox").hidden = k !== "file"; $("#textBox").hidden = k !== "text"; $("#linkBox").hidden = k !== "link";
 });
 
 /* ---------- base64 / sıkıştırma ---------- */
@@ -182,6 +188,15 @@ async function encode(file) {
   return { b64: bytesToB64(bytes), mime, name, gz, size: bytes.length };
 }
 
+async function encodeText(str, title) {
+  let bytes = new TextEncoder().encode(str), gz = false;
+  if (typeof CompressionStream !== "undefined") {
+    const z = await pipe(bytes, new CompressionStream("gzip"));
+    if (z.length < bytes.length) { bytes = z; gz = true; }
+  }
+  return { b64: bytesToB64(bytes), mime: "text/plain", name: (title.replace(/[^\wğüşıöçĞÜŞİÖÇ -]+/g, "").trim() || "metin") + ".txt", gz, size: bytes.length };
+}
+
 /* ---------- paylaşma ---------- */
 function say(el, text, type) { el.className = "msg " + type; el.innerHTML = text; }
 function progress(p) { $("#bar").style.display = p == null ? "none" : "block"; if (p != null) $("#bar i").style.width = p + "%"; }
@@ -196,6 +211,8 @@ $("#send").onclick = async () => {
   if (kind === "link") {
     url = $("#url").value.trim();
     if (!/^https?:\/\//i.test(url)) return say(m, "Link http:// veya https:// ile başlamalı.", "err");
+  } else if (kind === "text") {
+    if (!$("#body").value.trim()) return say(m, "Paylaşılacak bir metin yazmalısın.", "err");
   } else {
     const f = $("#file").files[0];
     if (!f) return say(m, "Bir dosya seçmelisin.", "err");
@@ -207,22 +224,23 @@ $("#send").onclick = async () => {
     const meta = { title, titleLower: tr(title), code, kind, desc: $("#desc").value.trim(), createdAt: serverTimestamp(), chunks: 0 };
     if (kind === "link") meta.url = url;
     else {
-      const e = await encode($("#file").files[0]);
+      const e = kind === "text" ? await encodeText($("#body").value, title) : await encode($("#file").files[0]);
       progress(30);
       const parts = [];
       for (let i = 0; i < e.b64.length; i += CHUNK) parts.push(e.b64.slice(i, i + CHUNK));
       Object.assign(meta, { name: e.name, mime: e.mime, gz: e.gz, size: e.size, chunks: parts.length });
-      for (let i = 0; i < parts.length; i++) {
+      for (let i = 0; i < parts.length; i += 4) {
         const b = writeBatch(db);
-        b.set(doc(db, "files", code, "c", String(i).padStart(3, "0")), { d: parts[i] });
+        for (let j = i; j < Math.min(i + 4, parts.length); j++)
+          b.set(doc(db, "files", code, "c", String(j).padStart(4, "0")), { d: parts[j] });
         await b.commit();
-        progress(30 + 65 * (i + 1) / parts.length);
+        progress(30 + 65 * Math.min(i + 4, parts.length) / parts.length);
       }
     }
     await setDoc(doc(db, "files", code), meta);   // meta en son yazılır: yarım yüklemeler görünmez
     progress(100);
     say(m, `Paylaşıldı! Kodun: <b>${esc(code)}</b><br>Doğrudan link: <a href="#${esc(code)}">${esc(location.href.split("#")[0])}#${esc(code)}</a>`, "ok");
-    $("#title").value = $("#code").value = $("#url").value = $("#desc").value = ""; $("#file").value = "";
+    $("#title").value = $("#code").value = $("#url").value = $("#desc").value = $("#body").value = ""; $("#file").value = "";
   } catch (err) {
     console.error(err);
     say(m, esc(err.message || "Yükleme başarısız. Firestore kurallarını kontrol et."), "err");
@@ -235,11 +253,11 @@ function card(d) {
   const kb = d.size ? ` · ${(d.size / 1024).toFixed(0)} KB` : "";
   const open = d.kind === "link"
     ? `<a class="btn ghost" href="${esc(d.url)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">Linki aç</a>`
-    : `<button class="btn ghost" data-act="view" data-code="${esc(d.code)}">Önizle / Aç</button>
+    : `<button class="btn ghost" data-act="view" data-code="${esc(d.code)}">${d.kind === "text" ? "Oku" : "Önizle / Aç"}</button>
        <button class="btn ghost" data-act="dl" data-code="${esc(d.code)}">İndir</button>`;
   return `<article class="item" id="i-${esc(d.code)}">
     <h3>${esc(d.title)}</h3>
-    <div class="meta">Kod: <span class="code" title="Kopyala" data-copy="${esc(d.code)}">${esc(d.code)}</span> · ${d.kind === "link" ? "Link" : esc(d.name || "Dosya")}${kb} · ${esc(date)}</div>
+    <div class="meta">Kod: <span class="code" title="Kopyala" data-copy="${esc(d.code)}">${esc(d.code)}</span> · ${d.kind === "link" ? "Link" : d.kind === "text" ? "Metin" : esc(d.name || "Dosya")}${kb} · ${esc(date)}</div>
     ${d.desc ? `<p>${esc(d.desc)}</p>` : ""}
     <div class="row">${open}</div><div class="prev"></div></article>`;
 }
@@ -282,6 +300,10 @@ $("#results").onclick = async e => {
       const a = document.createElement("a"); a.href = url; a.download = meta.name || meta.code; a.click();
     } else {
       const p = b.closest(".item").querySelector(".prev");
+      if (meta.mime.startsWith("text/")) {
+        const pre = document.createElement("pre"); pre.className = "txt"; pre.textContent = await blob.text();
+        p.replaceChildren(pre); b.disabled = false; b.textContent = old; return;
+      }
       p.innerHTML = meta.mime.startsWith("image/") ? `<img src="${url}" alt="">`
         : meta.mime.startsWith("video/") ? `<video src="${url}" controls></video>`
         : meta.mime.startsWith("audio/") ? `<audio src="${url}" controls></audio>`
